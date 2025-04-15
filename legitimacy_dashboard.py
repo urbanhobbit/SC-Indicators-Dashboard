@@ -90,16 +90,15 @@ hierarchy = pd.DataFrame({
 
 # Sidebar Filters
 
-st.sidebar.header("Filter Structure")
-with st.sidebar.expander("Display Options", expanded=True):
-    all_domains = hierarchy["Domain"].unique()
-    select_all_domains = st.checkbox("Select All Domains", value=True, key="select_all_domains")
-    selected_domains = st.multiselect("Select Domains", options=all_domains, default=all_domains if select_all_domains else [])
+st.sidebar.markdown("### 🧭 Navigation & Filters")
+st.sidebar.markdown("Use the filters below to customize the data shown in the dashboard.")
+with st.sidebar.expander("🔍 Filter & Select Data", expanded=True):
+    st.sidebar.markdown("---")
+
+    selected_domains = st.multiselect("Select Domains", options=hierarchy["Domain"].unique(), default=hierarchy["Domain"].unique())
     filtered_hierarchy = hierarchy[hierarchy["Domain"].isin(selected_domains)]
 
-    all_subdomains = filtered_hierarchy["Subdomain"].unique()
-    select_all_subdomains = st.checkbox("Select All Subdomains", value=True, key="select_all_subdomains")
-    selected_subdomains = st.multiselect("Select Subdomains", options=all_subdomains, default=all_subdomains if select_all_subdomains else [])
+    selected_subdomains = st.multiselect("Select Subdomains", options=filtered_hierarchy["Subdomain"].unique(), default=filtered_hierarchy["Subdomain"].unique())
     filtered_hierarchy = filtered_hierarchy[filtered_hierarchy["Subdomain"].isin(selected_subdomains)]
 
     countries = data["Country"].unique().tolist()
@@ -107,10 +106,18 @@ with st.sidebar.expander("Display Options", expanded=True):
 
     grouped_indicators = filtered_hierarchy.groupby("Subdomain")["Indicator"].apply(list).to_dict()
     selected_indicators = []
-    select_all_indicators = st.checkbox("Select All Indicators", value=True, key="select_all_indicators")
     for subdomain, indicators in grouped_indicators.items():
-        selected = st.multiselect(f"Indicators in {subdomain}", indicators, default=indicators if select_all_indicators else [], key=f"sel_{subdomain}")
+        selected = st.multiselect(f"Indicators in {subdomain}", indicators, default=indicators, key=f"sel_{subdomain}")
         selected_indicators.extend(selected)
+    
+    filtered_hierarchy = hierarchy[hierarchy["Domain"].isin(selected_domains)]
+
+    
+    filtered_hierarchy = filtered_hierarchy[filtered_hierarchy["Subdomain"].isin(selected_subdomains)]
+
+    
+
+    
 
 # Data Processing
 df = data[data["Country"].isin(selected_countries)]
@@ -190,9 +197,9 @@ view_option = st.markdown("""
     <hr style='margin-top: 1rem; margin-bottom: 1rem;'>
     <h3 style='font-weight: 600;'>Explore Dashboard Sections</h3>
 """, unsafe_allow_html=True)
-view_option = st.radio("Select view:", ["Tables", "Bar Charts", "Map", "Scatter Plot", "Radar Chart", "Indicator Charts", "Metadata"], horizontal=True)
+tabs = st.tabs(["Tables", "Bar Charts", "Map", "Scatter Plot", "Radar Chart", "Indicator Charts", "Metadata", "User Manual"])
 
-if view_option == "Tables":
+with tabs[0]:
     st.subheader("Composite Indices by Subdomain")
     st.dataframe(df_sub.style.format({col: "{:.2f}" for col in df_sub.select_dtypes(include='number').columns}))
 
@@ -202,22 +209,31 @@ if view_option == "Tables":
     st.subheader("Composite Index")
     st.dataframe(df_composite[["Country", "Composite_Index"]].style.format({"Composite_Index": "{:.2f}"}))
 
-elif view_option == "Bar Charts":
+with tabs[1]:
+    st.markdown("""
+    <div style='padding: 10px; background-color: #f0f4f8; border-radius: 8px; margin-bottom: 20px;'>
+        <strong>🔎 Summary:</strong><br>
+        Countries Selected: <strong>{}</strong><br>
+        Highest Composite Index: <strong>{} ({:.2f})</strong>
+    </div>
+    """.format(
+        len(df_composite),
+        df_composite.loc[df_composite["Composite_Index"].idxmax(), "Country"],
+        df_composite["Composite_Index"].max()
+    ), unsafe_allow_html=True)
     st.subheader("Bar Chart for Composite Index")
     df_plot_comp = df_composite.sort_values(by="Composite_Index")
-    fig_comp = px.bar(
-        df_plot_comp,
-        y="Country",
-        x="Composite_Index",
-        orientation="h",
-        title="Composite Index by Country",
-        color=np.where(df_plot_comp["Country"]=="EU", "EU", "Other"),
-        color_discrete_map={"EU": "red", "Other": "blue"},
-        text=df_plot_comp["Composite_Index"].map(lambda x: f"{x:.2f}"),
-        hover_data={"Composite_Index": True, "Country": True},
-        labels={"Composite_Index": "Composite Index"})
-    fig_comp.update_layout(yaxis_tickfont=dict(size=11), height=800)
-    fig_comp.update_traces(textposition="auto")
+    fig_comp = go.Figure()
+    fig_comp.add_trace(go.Bar(
+    y=df_plot_comp["Country"],
+    x=df_plot_comp["Composite_Index"],
+    orientation='h',
+    marker=dict(color=["red" if c == "EU" else "steelblue" for c in df_plot_comp["Country"]], line=dict(width=0), opacity=0.8),
+    text=[f"{v:.2f}" for v in df_plot_comp["Composite_Index"]],
+    textposition="auto",
+    hovertemplate="%{y}: %{x:.2f}<extra></extra>",
+))
+    fig_comp.update_layout(title="Composite Index by Country", height=800, yaxis_tickfont=dict(size=11), xaxis_title="Composite Index")
     st.plotly_chart(fig_comp, use_container_width=True)
 
     st.subheader("Bar Chart for Domain Index")
@@ -225,19 +241,17 @@ elif view_option == "Bar Charts":
         selected_domain = st.selectbox("Select Domain to Plot:", options=df_dom.columns[1:], key="domain_plot")
         if selected_domain in df_dom.columns:
             df_plot_dom = df_dom.sort_values(by=selected_domain)
-            fig_dom = px.bar(
-                df_plot_dom,
-                y="Country",
-                x=selected_domain,
-                orientation="h",
-                title=f"{selected_domain} by Country",
-                color=np.where(df_plot_dom["Country"]=="EU", "EU", "Other"),
-                color_discrete_map={"EU": "red", "Other": "blue"},
-                text=df_plot_dom[selected_domain].map(lambda x: f"{x:.2f}"),
-                hover_data={selected_domain: True, "Country": True},
-                labels={selected_domain: "Domain Index"})
-            fig_dom.update_layout(yaxis_tickfont=dict(size=11), height=800)
-            fig_dom.update_traces(textposition="auto")
+            fig_dom = go.Figure()
+            fig_dom.add_trace(go.Bar(
+                y=df_plot_dom["Country"],
+                x=df_plot_dom[selected_domain],
+                orientation='h',
+                marker=dict(color=["red" if c == "EU" else "steelblue" for c in df_plot_dom["Country"]], line=dict(width=0), opacity=0.8),
+                text=[f"{v:.2f}" for v in df_plot_dom[selected_domain]],
+                textposition="auto",
+                hovertemplate="%{y}: %{x:.2f}<extra></extra>",
+            ))
+            fig_dom.update_layout(title=f"{selected_domain} by Country", height=800, yaxis_tickfont=dict(size=11), xaxis_title="Domain Index")
             st.plotly_chart(fig_dom, use_container_width=True)
         else:
             st.warning("Selected domain is not available in the filtered dataset.")
@@ -247,22 +261,20 @@ elif view_option == "Bar Charts":
     st.subheader("Bar Chart for Subdomain Index")
     selected_subdomain = st.selectbox("Select Subdomain to Plot:", options=df_sub.columns[1:], key="subdomain_plot")
     df_plot_sub = df_sub.sort_values(by=selected_subdomain)
-    fig_sub = px.bar(
-        df_plot_sub,
-        y="Country",
-        x=selected_subdomain,
-        orientation="h",
-        title=f"{selected_subdomain} by Country",
-        color=np.where(df_plot_sub["Country"]=="EU", "EU", "Other"),
-        color_discrete_map={"EU": "red", "Other": "blue"},
-        text=df_plot_sub[selected_subdomain].map(lambda x: f"{x:.2f}"),
-        hover_data={selected_subdomain: True, "Country": True},
-        labels={selected_subdomain: "Subdomain Index"})
-    fig_sub.update_layout(yaxis_tickfont=dict(size=11), height=800)
-    fig_sub.update_traces(textposition="auto")
+    fig_sub = go.Figure()
+    fig_sub.add_trace(go.Bar(
+        y=df_plot_sub["Country"],
+        x=df_plot_sub[selected_subdomain],
+        orientation='h',
+        marker=dict(color=["red" if c == "EU" else "steelblue" for c in df_plot_sub["Country"]], line=dict(width=0), opacity=0.8),
+        text=[f"{v:.2f}" for v in df_plot_sub[selected_subdomain]],
+        textposition="auto",
+        hovertemplate="%{y}: %{x:.2f}<extra></extra>",
+    ))
+    fig_sub.update_layout(title=f"{selected_subdomain} by Country", height=800, yaxis_tickfont=dict(size=11), xaxis_title="Subdomain Index")
     st.plotly_chart(fig_sub, use_container_width=True)
 
-elif view_option == "Map":
+with tabs[2]:
     st.subheader("Map View")
     index_level = st.radio("Select index type to map:", ["Composite", "Domain", "Subdomain", "Indicator"], horizontal=True, key="map_level")
 
@@ -296,44 +308,81 @@ elif view_option == "Map":
         locations="iso_alpha",
         color=index_column,
         hover_name="Country",
-        color_continuous_scale="Blues",
+        hover_data={"Country": True, index_column: ":.2f"},
+        color_continuous_scale=px.colors.sequential.Blues,
         scope="europe",
-        title=f"{index_column} by Country",
-    hover_data={index_column: True, 'Country': True}
+        title=f"{index_column} by Country"
     )
     fig_map.update_geos(
         projection_type="mercator",
         center={"lat": 35, "lon": 25},
-        fitbounds="locations"
+        fitbounds="locations",
+        visible=False
     )
-    fig_map.update_layout(margin={"r":0,"t":30,"l":0,"b":0})
+    fig_map.update_layout(
+        margin={"r":0,"t":30,"l":0,"b":0},
+        coloraxis_colorbar=dict(
+            title=index_column,
+            ticks="outside",
+            tickformat=".2f"
+        )
+    )
     st.plotly_chart(fig_map, use_container_width=True)
 
-elif view_option == "Scatter Plot":
+with tabs[3]:
     st.subheader("Scatter Plot of Indices")
     level = st.radio("Select level of indices:", ["Domain", "Subdomain", "Composite"], horizontal=True, key="scatter_level_menu")
     df_to_plot = df_dom if level == "Domain" else df_sub if level == "Subdomain" else df_composite[["Country", "Composite_Index"]]
     x_axis = st.selectbox("Select X-axis index:", df_to_plot.columns[1:], key="x_axis")
     y_axis = st.selectbox("Select Y-axis index:", df_to_plot.columns[1:], key="y_axis")
-    fig_scatter = px.scatter(df_to_plot, x=x_axis, y=y_axis, text="Country", color=np.where(df_to_plot["Country"]=="EU", "EU", "Other"), hover_data={"Country": True})
+    fig_scatter = px.scatter(
+        df_to_plot,
+        x=x_axis,
+        y=y_axis,
+        text="Country",
+        color=np.where(df_to_plot["Country"] == "EU", "EU", "Other"),
+        color_discrete_map={"EU": "red", "Other": "steelblue"},
+        hover_data={"Country": True, x_axis: ":.2f", y_axis: ":.2f"}
+    )
     fig_scatter.update_traces(textposition='top center')
-    fig_scatter.update_layout(title=f"{x_axis} vs {y_axis} by Country")
+    fig_scatter.update_layout(
+        title=f"{x_axis} vs {y_axis} by Country",
+        xaxis=dict(tickformat=".2f"),
+        yaxis=dict(tickformat=".2f"),
+        height=700
+    )
     st.plotly_chart(fig_scatter, use_container_width=True)
 
-elif view_option == "Radar Chart":
+with tabs[4]:
     st.subheader("Radar Chart Comparison")
     level = st.radio("Select level of indices:", ["Domain", "Subdomain", "Composite"], horizontal=True, key="radar_level_menu_2")
     df_radar = df_dom if level == "Domain" else df_sub if level == "Subdomain" else df_composite[["Country", "Composite_Index"]]
     selected_countries_radar = st.multiselect("Select countries to compare:", df_radar["Country"].tolist(), default=["EU"])
     dimensions = df_radar.columns[1:]
     fig_radar = go.Figure()
-    for country in selected_countries_radar:
+    colors = px.colors.qualitative.Set2
+    for i, country in enumerate(selected_countries_radar):
         values = df_radar[df_radar["Country"] == country][dimensions].values.flatten().tolist()
-        fig_radar.add_trace(go.Scatterpolar(r=values, theta=dimensions, fill='toself', name=country, hoverinfo='text', text=[f"{val:.2f}" for val in values]))
-    fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 1])), showlegend=True)
+        fig_radar.add_trace(go.Scatterpolar(
+            r=values,
+            theta=dimensions,
+            fill='toself',
+            name=country,
+            line=dict(color=colors[i % len(colors)]),
+            hoverinfo='text',
+            text=[f"{country}: {val:.2f}" for val in values]
+        ))
+    fig_radar.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 1], tickfont=dict(size=10))
+        ),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
+        height=700
+    )
     st.plotly_chart(fig_radar, use_container_width=True)
 
-elif view_option == "Indicator Charts":
+with tabs[5]:
     st.subheader("Indicator Chart")
     norm_or_raw = st.radio("Select indicator type:", ["Normalized", "Raw"], horizontal=True)
     indicator_df = df_full if norm_or_raw == "Normalized" else pd.concat([df[["Country"]], df_raw_indicators], axis=1)
@@ -342,38 +391,58 @@ elif view_option == "Indicator Charts":
     indicators_in_group = [i for i in grouped_options[subdomain_selected] if i in indicator_df.columns]
     selected_indicator_to_plot = st.selectbox("Select Indicator", options=indicators_in_group, key="indicator_plot")
     df_plot_ind = indicator_df.sort_values(by=selected_indicator_to_plot)
-    fig_ind = px.bar(
-        df_plot_ind,
-        y="Country",
-        x=selected_indicator_to_plot,
-        orientation="h",
-        title=f"{selected_indicator_to_plot} by Country ({norm_or_raw})",
-        color=np.where(df_plot_ind["Country"]=="EU", "EU", "Other"),
-        color_discrete_map={"EU": "red", "Other": "blue"},
-        text=df_plot_ind[selected_indicator_to_plot].map(lambda x: f"{x:.2f}"),
-        hover_data={selected_indicator_to_plot: True, "Country": True},
-        labels={selected_indicator_to_plot: "Indicator Value"})
-    fig_ind.update_layout(yaxis_tickfont=dict(size=11), height=800)
-    fig_ind.update_traces(textposition="auto")
+    fig_ind = go.Figure()
+    fig_ind.add_trace(go.Bar(
+        y=df_plot_ind["Country"],
+        x=df_plot_ind[selected_indicator_to_plot],
+        orientation='h',
+        marker=dict(color=["red" if c == "EU" else "steelblue" for c in df_plot_ind["Country"]], line=dict(width=0), opacity=0.8),
+        text=[f"{v:.2f}" for v in df_plot_ind[selected_indicator_to_plot]],
+        textposition="auto",
+        hovertemplate="%{y}: %{x:.2f}<extra></extra>",
+    ))
+    fig_ind.update_layout(title=f"{selected_indicator_to_plot} by Country ({norm_or_raw})", height=800, yaxis_tickfont=dict(size=11), xaxis_title="Indicator Value")
     st.plotly_chart(fig_ind, use_container_width=True)
 
-elif view_option == "Metadata":
-    st.subheader("Indicator Metadata Library")
-    domain_filter = st.selectbox("Filter by Domain", metadata_df['Domain'].unique())
+with tabs[6]:
+    st.subheader("📘 Indicator Metadata Library")
+    st.markdown("Use the filters below to learn about the source, question wording, and scale of each indicator.")
+    domain_filter = st.selectbox("📂 Filter by Domain", metadata_df['Domain'].unique())
     sub_filtered = metadata_df[metadata_df['Domain'] == domain_filter]
-    subdomain_filter = st.selectbox("Filter by Subdomain", sub_filtered['Subdomain'].unique())
+    subdomain_filter = st.selectbox("📁 Filter by Subdomain", sub_filtered['Subdomain'].unique())
     final_filtered = sub_filtered[sub_filtered['Subdomain'] == subdomain_filter]
-    indicator_filter = st.selectbox("Select an Indicator", final_filtered['Indicator'].unique())
+    indicator_filter = st.selectbox("📌 Select an Indicator", final_filtered['Indicator'].unique())
     meta = final_filtered[final_filtered['Indicator'] == indicator_filter].iloc[0]
-    st.markdown(f"**Domain:** {meta['Domain']}")
-    st.markdown(f"**Subdomain:** {meta['Subdomain']}")
-    st.markdown(f"**Source:** [{meta['Source']}]({meta['Link']}) ({meta['Date']})")
-    st.markdown(f"**Response Scale:** {meta['Response Scale']}")
-    st.markdown(f"**Question:** {meta['Question']}")
+
+    st.markdown("""
+    <div style='padding: 1rem; background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 8px;'>
+        <p><strong>🧭 Domain:</strong> {}</p>
+        <p><strong>📚 Subdomain:</strong> {}</p>
+        <p><strong>🔗 Source:</strong> <a href='{}' target='_blank'>{}</a> ({})</p>
+        <p><strong>📐 Response Scale:</strong> {}</p>
+        <p><strong>📝 Question:</strong><br><em>{}</em></p>
+    </div>
+    """.format(
+        meta['Domain'],
+        meta['Subdomain'],
+        meta['Link'], meta['Source'], meta['Date'],
+        meta['Response Scale'],
+        meta['Question']
+    ), unsafe_allow_html=True)
     
 
 
 
+
+with tabs[7]:
+    st.subheader("📖 User Manual")
+    with open("Social Contract Indicators Dashboard User Manual.pdf", "rb") as pdf_file:
+        PDFbyte = pdf_file.read()
+    st.download_button(label="📥 Download Manual (PDF)",
+                       data=PDFbyte,
+                       file_name="Social_Contract_Indicators_Manual.pdf",
+                       mime='application/pdf')
+    st.markdown("Or [view the full manual online](https://your-link-if-hosted.com) 📄", unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
