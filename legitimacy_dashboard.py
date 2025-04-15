@@ -369,10 +369,8 @@ elif view_option == "Metadata":
     st.markdown(f"**Subdomain:** {meta['Subdomain']}")
     st.markdown(f"**Source:** [{meta['Source']}]({meta['Link']}) ({meta['Date']})")
     st.markdown(f"**Response Scale:** {meta['Response Scale']}")
-    st.markdown(f"**Question:**
-> {meta['Question']}")
-    st.markdown(f"[Open Source Link]({meta['Link']})")
-
+    st.markdown(f"**Question:** {meta['Question']}")
+    
 
 
 
